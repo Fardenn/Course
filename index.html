@@ -128,7 +128,7 @@ function recipes(){
   var h="";
   if(form){
     h+='<div class="card"><label for="fn" style="margin-top:0">Nom de la recette</label><input id="fn" value="'+esc(draft.name)+'" placeholder="Quiche lorraine">'+
-    (draft.url?'<div class="meta src">Source : '+esc(draft.url)+'</div>':"")+'<label>Ingrédients'+(draft.url?" (importés, non modifiables)":"")+'</label>';
+    (draft.img?'<img class="thumb" src="'+esc(draft.img)+'" alt="" referrerpolicy="no-referrer" style="margin-top:8px">':"")+(draft.url?'<div class="meta src">Source : '+esc(draft.url)+'</div>':"")+'<label>Ingrédients'+(draft.url?" (importés, non modifiables)":"")+'</label>';
     draft.ing.forEach(function(g,j){
       if(draft.url){h+='<div class="ing"><span>'+esc(itx({n:g.n,q:g.q===""?null:parseFloat(String(g.q).replace(",",".")),u:g.u}))+'</span></div>';return}
       h+='<div class="rowi"><span class="rn">'+esc(g.n)+'</span><input class="qi" inputmode="decimal" placeholder="Qté" value="'+esc(g.q)+'" data-r="'+j+'" aria-label="Quantité de '+esc(g.n)+'"><select class="ui" data-r="'+j+'" aria-label="Unité de '+esc(g.n)+'">'+
@@ -139,7 +139,7 @@ function recipes(){
   }else if(imp)h+=importPanel();else h+='<div class="acts" style="margin:0 0 12px"><button class="btn" style="flex:1;padding:13px" data-a="new">Nouvelle recette</button><button class="ghost" style="flex:1;padding:13px" data-a="imp">Importer un lien</button></div>';
   if(!S.recipes.length&&!form)h+='<div class="empty">Aucune recette pour l’instant.<br>Ajoutez-en une avec ses ingrédients : un tap les envoie dans vos courses.</div>';
   S.recipes.forEach(function(r,i){
-    h+='<div class="card"><div class="row">'+(/^https?:\/\//.test(r.img||"")?'<img class="thumb" src="'+esc(r.img)+'" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display=\'none\'">':"")+'<button class="head" data-a="view" data-i="'+i+'" aria-expanded="'+!!open[i]+'"><span class="title">'+esc(r.name)+'</span><span class="meta">'+r.ing.length+' ingrédient'+(r.ing.length>1?"s":"")+'</span></button>'+
+    h+='<div class="card"><div class="row">'+(/^(https?:\/\/|data:image\/)/.test(r.img||"")?'<img class="thumb" src="'+esc(r.img)+'" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display=\'none\'">':"")+'<button class="head" data-a="view" data-i="'+i+'" aria-expanded="'+!!open[i]+'"><span class="title">'+esc(r.name)+'</span><span class="meta">'+r.ing.length+' ingrédient'+(r.ing.length>1?"s":"")+'</span></button>'+
     '<button class="plus big minus" data-a="subr" data-i="'+i+'" aria-label="Retirer '+esc(r.name)+' de ma liste">−</button>'+
     '<button class="plus big" data-a="addr" data-i="'+i+'" aria-label="Ajouter '+esc(r.name)+' à ma liste">+</button>'+
     '<button class="plus x'+(armD===i?" arm":"")+'" data-a="del" data-i="'+i+'" aria-label="Supprimer '+esc(r.name)+'">'+(armD===i?"Supprimer ?":"✕")+'</button></div>';
@@ -174,14 +174,16 @@ function importPanel(){
   '<div id="is" class="meta" role="status" style="margin-top:10px"></div>'+
   '<div class="acts"><button class="btn" data-a="fetch">Récupérer les ingrédients</button><button class="ghost" data-a="icancel">Annuler</button></div></div>';
 }
+function shrink(src,cb){var im=new Image();im.onload=function(){try{var c=document.createElement("canvas"),n=160,w=im.naturalWidth,h=im.naturalHeight,z=Math.min(w,h);c.width=c.height=n;c.getContext("2d").drawImage(im,(w-z)/2,(h-z)/2,z,z,0,0,n,n);cb(c.toDataURL("image/jpeg",0.75))}catch(e){cb("")}};im.onerror=function(){cb("")};im.src=src}
 function doFetch(){
   var u=document.getElementById("iu").value.trim(),r=RELAY,st=document.getElementById("is");
   if(!/^https?:\/\//i.test(u)){st.textContent="Collez le lien complet de la recette (https://…).";return}
   st.textContent="Récupération en cours…";
   fetch(r+"/?url="+encodeURIComponent(u)).then(function(x){return x.json().catch(function(){return{error:"Réponse illisible du relais"}})}).then(function(d){
     if(d.error||!d.ingredients||!d.ingredients.length){st.textContent=d.error||"Aucun ingrédient trouvé sur cette page.";return}
-    draft={name:cleanName(d.name),url:d.url||u,img:d.image||"",ing:d.ingredients.map(toDraft)};imp=false;form=true;edit=null;render();
-    toast(d.ingredients.length+" ingrédients importés : vérifiez les quantités");
+    var finish=function(img){draft={name:cleanName(d.name),url:d.url||u,img:img,ing:d.ingredients.map(toDraft)};imp=false;form=true;edit=null;render();
+      toast(d.ingredients.length+" ingrédients importés"+(img?"":" (sans image)"))};
+    if(d.imageData)shrink(d.imageData,function(t){finish(t||d.image||"")});else finish(d.image||"");
   }).catch(function(){st.textContent="Impossible de joindre le relais : vérifiez son adresse."});
 }
 function ingredientsView(){return'<h1>Mes ingrédients</h1><div class="card"><input id="gq" placeholder="Rechercher ou ajouter un ingrédient" autocomplete="off" aria-label="Rechercher ou ajouter un ingrédient"><div id="il"></div></div>'}

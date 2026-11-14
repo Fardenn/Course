@@ -63,10 +63,13 @@ export default {
     // Titre affiché sur la page (plus court que le nom des données structurées)
     const h1 = (html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || [])[1];
     const title = h1 ? decode(h1.replace(/<[^>]+>/g, "")) : "";
+    const imgUrl = imageOf(recipe, html, res.url);
+    const imageData = imgUrl ? await toDataUrl(imgUrl, res.url) : "";
     return json({
       url: res.url,
       name: title && title.length < 120 ? title : decode(String(recipe.name || "")),
-      image: imageOf(recipe),
+      image: imgUrl,
+      imageData,
       ingredients,
     });
   },
@@ -112,9 +115,46 @@ function decode(s) {
     .trim();
 }
 
-function imageOf(r) {
+function imageOf(r, html, base) {
   let i = r.image;
   if (Array.isArray(i)) i = i[0];
   if (i && typeof i === "object") i = i.url || i.contentUrl;
-  return typeof i === "string" && /^https?:\/\//.test(i) ? i : "";
+  if (typeof i !== "string" || !i) {
+    const m =
+      html.match(/<meta[^>]+property=["']og:image["'][^>]*content=["']([^"']+)["']/i) ||
+      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
+    i = m ? decode(m[1]) : "";
+  }
+  if (!i) return "";
+  try {
+    const u = new URL(i, base);
+    return /^https?:$/.test(u.protocol) ? u.href : "";
+  } catch {
+    return "";
+  }
+}
+
+// Télécharge l'image côté relais (évite le blocage d'affichage par le site d'origine).
+async function toDataUrl(src, referer) {
+  try {
+    const r = await fetch(src, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "Referer": referer,
+      },
+    });
+    if (!r.ok) return "";
+    const type = (r.headers.get("content-type") || "").split(";")[0];
+    if (!type.startsWith("image/")) return "";
+    const u8 = new Uint8Array(await r.arrayBuffer());
+    if (u8.length > 1500000) return "";
+    let bin = "";
+    for (let i = 0; i < u8.length; i += 0x8000) {
+      bin += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+    }
+    return "data:" + type + ";base64," + btoa(bin);
+  } catch {
+    return "";
+  }
 }
